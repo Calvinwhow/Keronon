@@ -10,5 +10,5 @@ You can install the module using one of the following methods:
 
 - Install directly from the GitHub repository:
     ```bash
-    pip install git+<github url>
+    pip install git+https://github.com/Calvinwhow/Keronon.git
     ```
