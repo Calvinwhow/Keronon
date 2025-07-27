@@ -2,10 +2,10 @@ import numpy as np
 from optimizer.adam import initialize_adam, adam_step
 from optimizer.gradient_ascent import gradient_vector_handler
 from optimizer.stop_conditions import check_stop_conditions
-from optimizer.constraints import clip_amps, clip_gradient, project_num_contacts
+from optimizer.constraints import clip_amps, clip_gradient, project_contacts
 
 # -----------------------------
-# Helper Validation
+# Input Validation
 # -----------------------------
 
 def validate_inputs(sphere_coords, v, L):
@@ -32,10 +32,18 @@ def validate_inputs(sphere_coords, v, L):
         raise ValueError("Each landscape point must have four values: [x, y, z, magnitude]")
 
 # -----------------------------
-# Orchestration Function
+# Optimizer
 # -----------------------------
 
-def optimize_sphere_values(sphere_coords, v, L, lam=1, alpha=0.01, h=0.001, l1_tolerance=0.05, directional_models=None):
+def optimize_sphere_values(sphere_coords, 
+                           v, 
+                           L, 
+                           directional_models=None, 
+                           lam=0.001, 
+                           weight=10,
+                           alpha=0.001, 
+                           h=0.001, 
+                           l1_tolerance=0.001):
     """
     Optimizes sphere amplitudes using gradient ascent and ADAM optimization.
 
@@ -62,14 +70,14 @@ def optimize_sphere_values(sphere_coords, v, L, lam=1, alpha=0.01, h=0.001, l1_t
     current_v = np.copy(v)
     iteration = 0
     adam_state = initialize_adam(v)
-    while iteration < 50:
-        gradient_vector = gradient_vector_handler(current_v, h, sphere_coords, L, lam, directional_models)
+    while iteration < 100:
+        gradient_vector = gradient_vector_handler(current_v, h, sphere_coords, L, lam, directional_models, weight)
         clipped_gradient = clip_gradient(gradient_vector)
         current_v, adam_state = adam_step(clipped_gradient, current_v, adam_state, alpha)
         current_v = clip_amps(current_v)
         if check_stop_conditions(current_v, gradient_vector, l1_tolerance):
             break
         iteration += 1
-    num_contacts = 2
-    optimized_v = project_num_contacts(sphere_coords, current_v, num_contacts, L, lam, directional_models)
+    optimized_v = project_contacts(sphere_coords, current_v, L, lam, directional_models, weight)
+    print(optimized_v)
     return optimized_v

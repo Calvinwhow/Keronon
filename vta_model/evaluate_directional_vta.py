@@ -69,7 +69,7 @@ class EvaluateDirectionalVta:
     def radius_mm(self, value):
         if not isinstance(value, (int, float)):
             raise ValueError("radius_mm must be a numeric value.")
-        if value <= 0:
+        if value < 0:
             raise ValueError("radius_mm must be a positive value.")
         self._radius_mm = value
         

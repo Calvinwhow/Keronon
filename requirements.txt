@@ -2,3 +2,6 @@ numpy
 nibabel
 scikit-learn
 scipy
+pandas
+nilearn
+h5py

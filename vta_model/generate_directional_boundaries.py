@@ -7,7 +7,6 @@ class DirectionalVtaBounds:
 
     def _get_midpoint(self, origin, reference):
         '''Get geometric midpoint of two coordinates'''
-        print(origin, ' R:', reference)
         return (origin + reference) / 2
     
     def _bisector_plane(self, origin, reference):
