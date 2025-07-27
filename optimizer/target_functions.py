@@ -112,7 +112,6 @@ def target_function_handler(sphere_coords, v, L, directional_models=None, weight
             sum_target_value += target_value
     return sum_target_value
 
-
 def penalty_per_contact(v_i, lam):
     """
     Compute the penalty for a single contact based on current and lambda.
