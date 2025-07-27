@@ -2,34 +2,26 @@ import os
 import json
 import numpy as np
 import nibabel as nib
-from typing import List, Dict, Tuple
+from typing import List, Tuple, Dict
 from processing_utils.optimizer_postprocessing import process_vta
 from processing_utils.optimizer_preprocessing import handle_nii_map
-from processing_utils.testing import VtaAnalysis
 from matlab_utils.mat_reader import MatReader
-import glob
+from calvin_utils.ccm_utils.bounding_box import NiftiBoundingBox
+from glob import glob
 
 class OptimizerProcessor:
-    def __init__(self, reco_path: str, nifti_path: str, output_path: str):
-        self.reco_path = reco_path
+    def __init__(self, electrode_data, nifti_path: str, output_path: str):
+        self.electrode_data = electrode_data
         self.nifti_path = nifti_path
         self.output_path = output_path
-        self._mni_coords = None
 
-    @property
-    def mni_coords(self) -> List[Tuple[float, float, float, float]]:
-        if self._mni_coords is None:
-            self._mni_coords = self.nii_to_mni()
-        return self._mni_coords
-
-    def nii_to_mni(self) -> List[Tuple[float, float, float, float]]:
+    def nii_to_mni(self, path) -> List[Tuple[float, float, float, float]]:
         """Reads a NIfTI file and converts it to a list of MNI coordinates with associated r values."""
-        img = nib.load(self.nifti_path)
+        img = nib.load(path)
         data = img.get_fdata()
         affine = img.affine
         shape = data.shape
-        indices = np.indices(shape[:3])
-        indices = indices.reshape(3, -1) 
+        indices = np.indices(shape[:3]).reshape(3, -1)
         indices = np.vstack((indices, np.ones((1, indices.shape[1]))))
         mni_coords = np.dot(affine, indices)
         values = data.flatten()
@@ -40,31 +32,50 @@ class OptimizerProcessor:
         ]
         return mni_coords
     
+    def _get_lead_dbs_electrode(self): ## NOTE: Looks like you are trying to get multiple electrodes here. Just assign them to a new dictionary, 
+        '''edits to be made by savir'''
+        electrode = MatReader(self.reco_path).get_reconstructions() #NOTE:Just extracted this code to internal method and leaving for you. 
+        electrode_coords = np.array(reco['data'][coords]) ## NOTE:This is a touch unclean. Should extract the entire list in get_coordinates()
+        return [key for key in electrode['data'].keys() if key.startswith('coords_')] # NOTE:try to return a dict where each key is an integere (electrode) and the value is the coordinate list.
+    
+    def _get_json_electrode(self):
+        '''Opens a standard JSON and reads the electrode data in'''
+        with open('data.json', 'r') as file:
+            return json.load(file)
+    
+    def get_electrode_dict(self) -> Dict:
+        '''Function to receive electrode data of various sources'''
+        if isinstance(self.electrode_data, str) and self.electrode_data.lower().endswith('.mat'):
+            electrode_dict = self._get_lead_dbs_electrode()
+        elif isinstance(self.electrode_data, str) and self.electrode_data.lower().endswith('.json'):
+            electrode_dict = self._get_json_electrode()
+        else:
+            raise ValueError(f"File type not yet supported for file: {self.electrode_data}")
+        return electrode_dict
 
+    def optimize_electrode(self, target_coords:List, coords:list):
+        '''Runs optimizer on list of contact coordinates using a list of target coords'''
+        return handle_nii_map(L=np.array(self.mni_coords), sphere_coords=coords, lambda_val=0.0001, weight=1) #NOTE: I don't really think this handle_nii_map function is robust. It needs to be cleaner--its the critical link between this interface and the optimizer. 
+        
+    def save_vta(self, optima_ampers, electrode_coords, electrode_idx):
+        out_dir = os.path.join(self.output_path, f'electrode_{electrode_idx}')
+        os.makedirs(out_dir, exist_ok=True)
+        process_vta(optima_ampers, electrode_coords, electrode_idx, out_dir) ##NOTE: This function could be cleaned up. 
+        return out_dir
+    
+    def merge_vtas(self, path):
+        bbox = NiftiBoundingBox(glob(path))
+        bbox.gen_mask(path)
+        
     def run(self):
         """Processes the data and calls handle_nii_map for each combination of lambda and weight."""
-        reconstructions = MatReader(self.reco_path).get_reconstructions()
-
-        for reco in reconstructions:
-            coords_list = [key for key in reco['data'].keys() if key.startswith('coords_')]
-            for i, coords in enumerate(coords_list):
-                try:
-                    electrode_coords = np.array(reco['data'][coords])
-                    output_dir = os.path.join(self.output_path, f'elec_{i}')
-                    os.makedirs(self.output_path, exist_ok=True)
-                    v = handle_nii_map(
-                        L=np.array(self.mni_coords),
-                        sphere_coords=electrode_coords,
-                        lambda_val=0.001,
-                        weight=10,
-                    )
-                    process_vta(v, electrode_coords, i, output_dir)
-                    analysis = VtaAnalysis(folder_path=output_dir, target_path=self.nifti_path, dice_path = self.output_path)
-                    correlation = analysis.run_analysis('combined_image.nii')
-                except Exception as e:
-                    print(f"Error processing {reco['dir_name']} for {coords}: {e}")
-                    continue
-
+        target_coords = self.nii_to_mni(self.nifti_path)
+        electrode_dict = self.get_electrode_dict()
+        for electrode_idx, electrode_coords in enumerate(electrode_dict):
+            optima_ampers = self.optimize_electrode(target_coords, electrode_coords)
+            output_direct = self.save_vta(optima_ampers, electrode_coords, electrode_idx)
+            self.merge_vtas(output_direct)
+            
 if __name__ == "__main__":
     reco_path = '/path/to/reconstruction.mat'
     nifti_path = '/path/to/target_map.nii'
