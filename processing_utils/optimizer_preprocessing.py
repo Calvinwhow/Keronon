@@ -136,19 +136,19 @@ def bounding_box(L: np.ndarray, box_size: float = 10) -> np.ndarray:
     return filtered_L
 
 
-def handle_nii_map( L: np.ndarray, sphere_coords: np.ndarray, lambda_val: float=0.001, weight: float=10 ):
-    L = normalize(L)
-    L = bounding_box(L, 40)
+def handle_nii_map(L: np.ndarray, sphere_coords: np.ndarray, lambda_val: float=0.001, weight: float=10):
+    L = bounding_box(normalize(L), 40)
 
     try:
         v = get_v(L, sphere_coords, 20)
     except Exception as e:
+        print(f"Error in get_v: {e}")
         v = np.random.normal(loc=0.5, scale=0.1, size=len(sphere_coords))
         while sum(v) >= 5:
             v = np.random.normal(loc=0.5, scale=0.1, size=len(sphere_coords))
-    if len(v) != 8:
-        directional_models_list = None
-    else:
+
+    directional_models_list = None
+    if len(v) == 8:
         directional_models_list = [
             None,
             EvaluateDirectionalVta(contact_coordinates=sphere_coords[1:4].tolist(), primary_idx=0),

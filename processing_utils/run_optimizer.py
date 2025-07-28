@@ -32,11 +32,10 @@ class OptimizerProcessor:
         ]
         return mni_coords
     
-    def _get_lead_dbs_electrode(self): ## NOTE: Looks like you are trying to get multiple electrodes here. Just assign them to a new dictionary, 
-        '''edits to be made by savir'''
-        electrode = MatReader(self.reco_path).get_reconstructions() #NOTE:Just extracted this code to internal method and leaving for you. 
-        electrode_coords = np.array(reco['data'][coords]) ## NOTE:This is a touch unclean. Should extract the entire list in get_coordinates()
-        return [key for key in electrode['data'].keys() if key.startswith('coords_')] # NOTE:try to return a dict where each key is an integere (electrode) and the value is the coordinate list.
+    def _get_lead_dbs_electrode(self):
+        electrode = MatReader(self.electrode_data).get_reconstructions()[0]
+        electrode_coords = {int(key.split('_')[-1]): np.array(electrode['data'][key]) for key in electrode['data'].keys() if key.startswith('coords_')}
+        return electrode_coords
     
     def _get_json_electrode(self):
         '''Opens a standard JSON and reads the electrode data in'''
@@ -53,32 +52,38 @@ class OptimizerProcessor:
             raise ValueError(f"File type not yet supported for file: {self.electrode_data}")
         return electrode_dict
 
-    def optimize_electrode(self, target_coords:List, coords:list):
+    def optimize_electrode(self, target_coords, coords:list):
         '''Runs optimizer on list of contact coordinates using a list of target coords'''
-        return handle_nii_map(L=np.array(self.mni_coords), sphere_coords=coords, lambda_val=0.0001, weight=1) #NOTE: I don't really think this handle_nii_map function is robust. It needs to be cleaner--its the critical link between this interface and the optimizer. 
+        try:
+            return handle_nii_map(L=np.array(target_coords), sphere_coords=coords, lambda_val=0.0001, weight=1)
+        except Exception as e:
+            print(f"Error in handle_nii_map: {e}")
+            return None
         
     def save_vta(self, optima_ampers, electrode_coords, electrode_idx):
         out_dir = os.path.join(self.output_path, f'electrode_{electrode_idx}')
         os.makedirs(out_dir, exist_ok=True)
-        process_vta(optima_ampers, electrode_coords, electrode_idx, out_dir) ##NOTE: This function could be cleaned up. 
-        return out_dir
+        process_vta(optima_ampers, electrode_coords, electrode_idx, out_dir)
+        nii_files = [os.path.join(out_dir, file) for file in os.listdir(out_dir) if file.endswith('.nii')]
+        return nii_files
     
-    def merge_vtas(self, path):
-        bbox = NiftiBoundingBox(glob(path))
-        bbox.gen_mask(path)
+    def merge_vtas(self, path, out_dir):
+        bbox = NiftiBoundingBox(path)
+        bbox.gen_mask(out_dir)
         
     def run(self):
         """Processes the data and calls handle_nii_map for each combination of lambda and weight."""
         target_coords = self.nii_to_mni(self.nifti_path)
         electrode_dict = self.get_electrode_dict()
-        for electrode_idx, electrode_coords in enumerate(electrode_dict):
+        for electrode_idx in electrode_dict:
+            electrode_coords = electrode_dict[electrode_idx]
             optima_ampers = self.optimize_electrode(target_coords, electrode_coords)
             output_direct = self.save_vta(optima_ampers, electrode_coords, electrode_idx)
-            self.merge_vtas(output_direct)
+            self.merge_vtas(output_direct, os.path.join(self.output_path, f'electrode_{electrode_idx}'))
             
 if __name__ == "__main__":
-    reco_path = '/path/to/reconstruction.mat'
-    nifti_path = '/path/to/target_map.nii'
+    electrode_data = '/path/to/reco.mat'
+    nifti_path = '/path/to/nifti.nii'
     output_path = '/path/to/output'
-    processor = OptimizerProcessor(reco_path, nifti_path, output_path)
+    processor = OptimizerProcessor(electrode_data, nifti_path, output_path)
     processor.run()
