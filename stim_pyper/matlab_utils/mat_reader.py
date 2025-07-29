@@ -11,6 +11,7 @@ class MatReaderV2:
         self.file_path = Path(file_path).expanduser().resolve()
         self._data: Optional[dict] = None
         self._f: Optional[h5py.File] = None
+        self._scipy = False
 
     def _h5_to_dict(self, group):
         '''Converts an h5 file to a dict.'''
@@ -29,6 +30,7 @@ class MatReaderV2:
             from scipy.io import loadmat
             self._data = loadmat(self.file_path, simplify_cells=True)
             self._f = None
+            self._scipy = True
         except (NotImplementedError, ValueError):
             self._f = h5py.File(self.file_path, "r")
             self._data = self._h5_to_dict(self._f)
@@ -49,11 +51,23 @@ class MatReaderV2:
             raise RuntimeError("Cannot resolve reference: no open h5py.File")
         return self._f[ref][()].T
     
+    def _resolve_scipy_elmodel(self):
+        '''Quick function to extract electrode models from old mat files opened with scipy.'''
+        model_list = []
+        for electrode in self._data['reco']['props']:
+            model = electrode['elmodel']
+            model_list.append(str(model))
+        return model_list
+    
     def coords(self) -> List[np.ndarray]:
         d = self._get("reco", "mni", "coords_mm")
         if d is None:
             return []
-
+        
+        if self._scipy: # catch if scipy handled old mat file version. return output of dict directly. 
+            return d
+        
+        # Continue with H5Py approach
         arr = d[()] if isinstance(d, h5py.Dataset) else d  # payload
 
         # single electrode, already numeric
@@ -69,13 +83,30 @@ class MatReaderV2:
 
     def elmodels(self) -> list[str]:
         '''Recurses through the dict and gets the elmodel string'''
+        if self._scipy:
+            return self._resolve_scipy_elmodel() 
+        
         e = self._get("reco", "props", "elmodel")
         if e is None:
             return []
+        
+        if self._scipy: # catch if scipy handled old mat file version. return output of dict directly. 
+            return e
+        
         obj = e[()]
         if obj.dtype == object:                          # multiple refs
             return [''.join(map(chr, self._f[r][()].flatten())) for r in obj.flatten()]
         return [''.join(map(chr, obj.flatten()))]        # single string
+    
+    def _get_segments(self, lut_dict, electrode_model, segment_lut):
+        '''Segment extraction function'''
+        try: 
+            segments = lut_dict[electrode_model][segment_lut]
+        except KeyError as e:
+            raise KeyError(f"Model: {electrode_model} is not implemented in electrode_lut.json")
+        except Exception as e:
+            raise RuntimeError(f"Error in _get_segments: {e}")
+        return segments
     
     def segment_lookup(self, electrode_model, segment_lut='contact_segment_labels') -> List[int]:
         '''References the electrode_lut.json file which contains info on which contacts are in which segments.'''
@@ -83,9 +114,8 @@ class MatReaderV2:
         lut = os.path.join(cwd, 'stim_pyper', 'resources', 'electrode_lut.json')
         with open(lut, 'r') as f:
             lut_dict = json.load(f)
-        segments = lut_dict[electrode_model][segment_lut]
-        return segments
-    
+        return self._get_segments(lut_dict, electrode_model, segment_lut)
+        
     def pair_contacts_to_segments(self, contact_coords, segments) -> Dict:
         '''Places each contact in a dict with a subdict relating its segment and coordinates.'''
         contact_dict = {}
@@ -108,7 +138,6 @@ class MatReaderV2:
 
         out = []
         for coord, model in zip(coords_list, model_list):
-            print(coord, model)
             segments = self.segment_lookup(model)
             out.append(self.pair_contacts_to_segments(coord, segments))
         return out
