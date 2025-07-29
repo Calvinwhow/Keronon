@@ -1,0 +1,15 @@
+{
+  "Medtronic 3389": "medtronic_3389",
+  "Medtronic 3387": "medtronic_3387",
+  "Medtronic 3391": "medtronic_3391",
+  "Medtronic B33005": "medtronic_b33005",
+  "Medtronic B33015": "medtronic_b33015",
+  "Boston Scientific Vercise": "boston_vercise",
+  "Boston Scientific Vercise Directed": "boston_vercise_directed",
+  "Boston Scientific Vercise Cartesia HX": "boston_vercise_cartesia_hx",
+  "Boston Scientific Vercise Cartesia X": "boston_vercise_cartesia_x",
+  "Abbott ActiveTip (6146-6149)": "abbott_activetip_2mm",
+  "Abbott ActiveTip (6142-6145)": "abbott_activetip_3mm",
+  "Abbott Directed 6172 (short)": "abbott_directed_05",
+  "Abbott Directed 6173 (long)": "abbott_directed_15"
+}

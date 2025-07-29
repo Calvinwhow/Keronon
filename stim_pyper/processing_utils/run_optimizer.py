@@ -111,8 +111,8 @@ class OptimizerProcessor:
         return electrode_info
             
 if __name__ == "__main__":
-    electrode_data = '/path/to/reco.mat'
-    nifti_path = '/path/to/nifti.nii'
-    output_path = '/path/to/output'
-    processor = OptimizerProcessor(electrode_data, nifti_path, output_path)
+    recon_path = '/path/to/reco.mat'
+    target_path = '/path/to/nifti.nii'
+    out_dir = '/path/to/output'
+    processor = OptimizerProcessor(electrode_data_path=recon_path, nifti_path=target_path, output_path=out_dir)
     processor.run()

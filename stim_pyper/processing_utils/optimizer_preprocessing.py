@@ -121,24 +121,24 @@ def positivity_metric(value: float, distance: float, d0: float = 1.0) -> float:
     """
     return value / (1 + np.exp(distance - d0))
 
-def bounding_box(L: np.ndarray, box_size: float = 10) -> np.ndarray:
+def bounding_box(L: np.ndarray, box_size: float = 10, sphere_coords: np.ndarray = None) -> np.ndarray:
     """
     Returns:
         np.ndarray: Bounding box coordinates.
     """
     half_size = box_size / 2
+    cx, cy, cz = np.mean(sphere_coords, axis=0)[:3]
     mask = (
-        (L[:, 0] >= -half_size) & (L[:, 0] <= half_size) &
-        (L[:, 1] >= -half_size) & (L[:, 1] <= half_size) &
-        (L[:, 2] >= -half_size) & (L[:, 2] <= half_size)
+        (L[:, 0] >= cx - half_size) & (L[:, 0] <= cx + half_size) &
+        (L[:, 1] >= cy - half_size) & (L[:, 1] <= cy + half_size) &
+        (L[:, 2] >= cz - half_size) & (L[:, 2] <= cz + half_size)
     )
     filtered_L = L[mask]
     return filtered_L
 
 def handle_nii_map(L: np.ndarray, sphere_coords: np.ndarray, lambda_val: float=0.001, directional_models_list: List[EvaluateDirectionalVta]=None):
     '''Handler function to preprocess the landscape values, get initial guess for v, and call the optimization.'''
-    L = bounding_box(normalize(L), 40)
-
+    L = bounding_box(normalize(L), 30, sphere_coords)
     try:
         v = get_v(L, sphere_coords, 20)
     except Exception as e:

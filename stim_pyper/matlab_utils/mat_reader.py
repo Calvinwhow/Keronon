@@ -97,23 +97,45 @@ class MatReaderV2:
         if obj.dtype == object:                          # multiple refs
             return [''.join(map(chr, self._f[r][()].flatten())) for r in obj.flatten()]
         return [''.join(map(chr, obj.flatten()))]        # single string
-    
+
+    def _get_directional_segments(self, lut_dict, electrode_model):
+        '''Get the segments for a directional electrode model'''
+        etageidx = lut_dict[electrode_model]['etageidx']
+        segments = []
+        contact_level = 1
+        for idx in etageidx:
+            if ':' in idx:
+                start, end = map(int, idx.split(':'))
+                segments.extend([contact_level] * (end - start + 1))
+            else:
+                segments.append(contact_level)
+            contact_level += 1
+        return segments
+
     def _get_segments(self, lut_dict, electrode_model, segment_lut):
         '''Segment extraction function'''
         try: 
-            segments = lut_dict[electrode_model][segment_lut]
+            isdirectional = lut_dict[electrode_model]['isdirected']
+            if isdirectional:
+                segments = self._get_directional_segments(lut_dict, electrode_model)
+            else:
+                segments = list(range(1, int(lut_dict[electrode_model][segment_lut]) + 1))
         except KeyError as e:
-            raise KeyError(f"Model: {electrode_model} is not implemented in electrode_lut.json")
+            raise KeyError(f"Model: {electrode_model} is not implemented in electrode_specs.json")
         except Exception as e:
             raise RuntimeError(f"Error in _get_segments: {e}")
         return segments
     
-    def segment_lookup(self, electrode_model, segment_lut='contact_segment_labels') -> List[int]:
+    def segment_lookup(self, electrode_model, segment_lut='numel') -> List[int]:
         '''References the electrode_lut.json file which contains info on which contacts are in which segments.'''
         cwd = os.path.abspath(os.getcwd())
-        lut = os.path.join(cwd, 'stim_pyper', 'resources', 'electrode_lut.json')
+        lut = os.path.join(cwd, 'stim_pyper', 'resources', 'electrode_specs.json')
+        converter = os.path.join(cwd, 'stim_pyper', 'resources', 'elec_converter.json')
         with open(lut, 'r') as f:
             lut_dict = json.load(f)
+        with open(converter, 'r') as f:
+            converter_dict = json.load(f)
+        electrode_model = converter_dict[electrode_model]
         return self._get_segments(lut_dict, electrode_model, segment_lut)
         
     def pair_contacts_to_segments(self, contact_coords, segments) -> Dict:
