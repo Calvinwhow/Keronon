@@ -108,6 +108,7 @@ class MatReaderV2:
 
         out = []
         for coord, model in zip(coords_list, model_list):
+            print(coord, model)
             segments = self.segment_lookup(model)
             out.append(self.pair_contacts_to_segments(coord, segments))
         return out

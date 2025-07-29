@@ -7,9 +7,9 @@ from typing import List, Tuple, Dict
 from stim_pyper.processing_utils.optimizer_postprocessing import process_vta
 from stim_pyper.processing_utils.optimizer_preprocessing import handle_nii_map
 from stim_pyper.matlab_utils.mat_reader import MatReader, MatReaderV2
+from stim_pyper.json_utils.json_reader import JsonReader
 from calvin_utils.ccm_utils.bounding_box import NiftiBoundingBox
 from stim_pyper.vta_model.evaluate_directional_vta import EvaluateDirectionalVta
-from glob import glob
 
 class OptimizerProcessor:
     def __init__(self, electrode_data_path, nifti_path: str, output_path: str):
@@ -35,13 +35,14 @@ class OptimizerProcessor:
         return mni_coords
     
     def _get_lead_dbs_electrode(self):
+        '''Opens a standard lead dbs reconstruction.mat and reads the electrode data in'''
         electrode_info = MatReaderV2(self.electrode_data).run()
         return electrode_info
     
     def _get_json_electrode(self):
         '''Opens a standard JSON and reads the electrode data in'''
-        with open('data.json', 'r') as file:
-            return json.load(file)
+        electrode_info = JsonReader(self.electrode_data).run()
+        return electrode_info
     
     def get_electrode_info(self) -> List[Dict]:
         '''Function to receive electrode data of various sources'''
