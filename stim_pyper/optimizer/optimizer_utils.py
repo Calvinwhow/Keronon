@@ -40,7 +40,6 @@ def optimize_sphere_values(sphere_coords,
                            L, 
                            directional_models=None, 
                            lam=0.0001, 
-                           weight=1,
                            alpha=0.001, 
                            h=0.001, 
                            l1_tolerance=0.001):
@@ -71,13 +70,12 @@ def optimize_sphere_values(sphere_coords,
     iteration = 0
     adam_state = initialize_adam(v)
     while iteration < 100:
-        gradient_vector         = gradient_vector_handler(current_v, h, sphere_coords, L, lam, directional_models, weight)
+        gradient_vector         = gradient_vector_handler(current_v, h, sphere_coords, L, lam, directional_models)
         clipped_gradient        = clip_gradient(gradient_vector)
         current_v, adam_state   = adam_step(clipped_gradient, current_v, adam_state, alpha)
         current_v               = clip_amps(current_v)
         if check_stop_conditions(current_v, gradient_vector, l1_tolerance):
             break
         iteration += 1
-    optimized_v                 = project_contacts(sphere_coords, current_v, L, lam, directional_models, weight)
-    print(optimized_v)
+    optimized_v                 = project_contacts(sphere_coords, current_v, L, lam, directional_models)
     return optimized_v

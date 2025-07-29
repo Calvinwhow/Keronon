@@ -51,7 +51,7 @@ def dot_product(S, L):
 def get_sphere_volume(r):
     return 4/3 * r**3 * np.pi
 
-def target_function(S_r, L, volume, weight=None, e=1e-8):
+def target_function(S_r, L, volume, e=1e-8):
     """
     Compute the target function value for a sphere. 
     Result is total density of voxel values inside sphere.
@@ -60,13 +60,12 @@ def target_function(S_r, L, volume, weight=None, e=1e-8):
         S_r: Binary array indicating points inside the sphere.
         L: Array of points with magnitudes.
         r: Radius of the sphere.
-        weight: Weight factor for the target function.
         e: Prevents division by zero. 
     
     Returns:
         Target function value.
     """
-    numerator = dot_product(S_r, L) * weight
+    numerator = dot_product(S_r, L)
     return numerator / (volume + e)
 
 def assign_directional_values(L, directional_model):
@@ -84,7 +83,7 @@ def assign_directional_values(L, directional_model):
     mask = directional_model.evaluate_planar_and_spherical_points(coords)
     return mask.astype(int)
 
-def target_function_handler(sphere_coords, v, L, directional_models=None, weight=None):
+def target_function_handler(sphere_coords, v, L, directional_models=None):
     """
     Compute the total target function value for all spheres or directional VTAs.
     
@@ -108,7 +107,7 @@ def target_function_handler(sphere_coords, v, L, directional_models=None, weight
                 volume = volume / 3
             else:
                 S_r = assign_sphere_values(L, center, r)
-            target_value = target_function(S_r, L, volume, weight)
+            target_value = target_function(S_r, L, volume)
             sum_target_value += target_value
     return sum_target_value
 
@@ -155,7 +154,7 @@ def penalty_all_contacts(v, lam):
         return lam / (5 - sum(v))
     return 0
 
-def loss_function(sphere_coords, v, L, lam, directional_models=None, weight=None):
+def loss_function(sphere_coords, v, L, lam, directional_models=None):
     """
     Compute the loss function as the difference between target and penalties.
 
@@ -169,10 +168,10 @@ def loss_function(sphere_coords, v, L, lam, directional_models=None, weight=None
     Returns:
         Loss function value.
     """
-    T = target_function_handler(sphere_coords, v, L, directional_models, weight)
+    T = target_function_handler(sphere_coords, v, L, directional_models)
     P1 = penalty_per_contact_handler(v, lam)
     P2 = penalty_all_contacts(v, lam)
-    if directional_models:
-        P1 = P1 / 3
+    # if directional_models:
+    #     P1 = P1 / 3
     return T - P1 - P2
 

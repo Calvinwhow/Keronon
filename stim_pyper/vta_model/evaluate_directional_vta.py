@@ -27,7 +27,7 @@ class EvaluateDirectionalVta:
         self.radius_mm = radius_mm
         self.boundary_evaluator = DirectionalVtaBounds(contact_coordinates)
         self.contact_coordinates = contact_coordinates
-        self.center_coord = self.contact_coordinates[0]
+        self.center_coord = self.contact_coordinates[primary_idx]
         # Precompute boundary function
         self.boundary_fn = self.boundary_evaluator.composite_boundary_condition(primary_idx)
         

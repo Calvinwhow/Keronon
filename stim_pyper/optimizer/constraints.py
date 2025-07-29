@@ -26,26 +26,15 @@ def project_constraints(v, max_total=5):
         return (v / current_sum) * max_total
 
 
-def project_contacts(sphere_coords, v, L, lam=1, directional_models=None, weight=None):
-    """
-    Projects losses to ensure they are positive and within a specified range.
-    
-    Args:
-        sphere_coords (np.ndarray): Coordinates of the spheres.
-        v (np.ndarray): Current amplitudes.
-        L (np.ndarray): Landscape data.
-        lam (float): Regularization parameter.
-        directional_models: Optional list of EvaluateDirectionalVta instances (or None).
-
-    Returns:
-        np.ndarray: Adjusted amplitudes.
-    """
+def project_contacts(sphere_coords, v, L, lam=1, directional_models=None) -> np.ndarray:
+    """Projects losses to ensure they are positive and within a specified range."""
     total_amplitude = np.sum(v)
     losses = [
-        (idx, loss_function(sphere_coords, np.eye(1, len(v), idx)[0] * val, L, lam, directional_models, weight))
-        for idx, val in enumerate(v) if val > 0
+        (idx, loss_function(sphere_coords, np.eye(1, len(v), idx)[0] * amps, L, lam, directional_models))
+        for idx, amps in enumerate(v) if amps > 0
     ]
     losses = [(idx, loss) for idx, loss in losses if loss >= 0]
+
     total_loss = sum(loss for _, loss in losses)
     if total_loss > 0:
         losses = [(idx, round((loss / total_loss) * total_amplitude, 1)) for idx, loss in losses]

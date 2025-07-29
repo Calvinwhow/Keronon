@@ -135,18 +135,8 @@ def bounding_box(L: np.ndarray, box_size: float = 10) -> np.ndarray:
     filtered_L = L[mask]
     return filtered_L
 
-def get_directional_coordinates(sphere_coords: np.ndarray):
-    '''Extracts directional contacts by detecting segments as sublists'''
-    
-
-
-def handle_nii_map(L: np.ndarray, sphere_coords: np.ndarray, lambda_val: float=0.0001, weight: float=1):
-    '''
-    Handler function to preprocess the landscape values, get initial guess for v, and call the optimization. 
-    
-    TODO: REMOVE THE HARD-CODED DIRECTIONAL MODELS LIST. WE SHOULD PACKAGE SPHERE_COORDS AS A LIST OF LISTS. 
-    ANY SUBLIST DEFINES A SEGMENT. THUS, IF A SUBLIST HAS LEN>1, WE CREATE A DIRECTIONAL VTA FOR IT.
-    '''
+def handle_nii_map(L: np.ndarray, sphere_coords: np.ndarray, lambda_val: float=0.001, directional_models_list: List[EvaluateDirectionalVta]=None):
+    '''Handler function to preprocess the landscape values, get initial guess for v, and call the optimization.'''
     L = bounding_box(normalize(L), 40)
 
     try:
@@ -156,18 +146,5 @@ def handle_nii_map(L: np.ndarray, sphere_coords: np.ndarray, lambda_val: float=0
         v = np.random.normal(loc=0.5, scale=0.1, size=len(sphere_coords))
         while sum(v) >= 5:
             v = np.random.normal(loc=0.5, scale=0.1, size=len(sphere_coords))
-
-    directional_models_list = None
-    if len(v) == 8:
-        directional_models_list = [
-            None,
-            EvaluateDirectionalVta(contact_coordinates=sphere_coords[1:4].tolist(), primary_idx=0),
-            EvaluateDirectionalVta(contact_coordinates=sphere_coords[1:4].tolist(), primary_idx=1),
-            EvaluateDirectionalVta(contact_coordinates=sphere_coords[1:4].tolist(), primary_idx=2),
-            EvaluateDirectionalVta(contact_coordinates=sphere_coords[4:7].tolist(), primary_idx=0),
-            EvaluateDirectionalVta(contact_coordinates=sphere_coords[4:7].tolist(), primary_idx=1),
-            EvaluateDirectionalVta(contact_coordinates=sphere_coords[4:7].tolist(), primary_idx=2),
-            None,
-        ]
-    output_v = optimize_sphere_values(sphere_coords, v, L, directional_models=directional_models_list, lam=lambda_val, weight=weight)
+    output_v = optimize_sphere_values(sphere_coords, v, L, directional_models=directional_models_list, lam=lambda_val)
     return output_v
