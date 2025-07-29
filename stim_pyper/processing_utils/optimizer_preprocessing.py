@@ -135,8 +135,18 @@ def bounding_box(L: np.ndarray, box_size: float = 10) -> np.ndarray:
     filtered_L = L[mask]
     return filtered_L
 
+def get_directional_coordinates(sphere_coords: np.ndarray):
+    '''Extracts directional contacts by detecting segments as sublists'''
+    
 
-def handle_nii_map(L: np.ndarray, sphere_coords: np.ndarray, lambda_val: float=0.001, weight: float=10):
+
+def handle_nii_map(L: np.ndarray, sphere_coords: np.ndarray, lambda_val: float=0.0001, weight: float=1):
+    '''
+    Handler function to preprocess the landscape values, get initial guess for v, and call the optimization. 
+    
+    TODO: REMOVE THE HARD-CODED DIRECTIONAL MODELS LIST. WE SHOULD PACKAGE SPHERE_COORDS AS A LIST OF LISTS. 
+    ANY SUBLIST DEFINES A SEGMENT. THUS, IF A SUBLIST HAS LEN>1, WE CREATE A DIRECTIONAL VTA FOR IT.
+    '''
     L = bounding_box(normalize(L), 40)
 
     try:

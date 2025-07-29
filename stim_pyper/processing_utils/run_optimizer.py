@@ -52,10 +52,11 @@ class OptimizerProcessor:
             raise ValueError(f"File type not yet supported for file: {self.electrode_data}")
         return electrode_dict
 
-    def optimize_electrode(self, target_coords, coords:list):
+    def optimize_electrode(self, target_coords, electrode_coords):
         '''Runs optimizer on list of contact coordinates using a list of target coords'''
         try:
-            return handle_nii_map(L=np.array(target_coords), sphere_coords=coords, lambda_val=0.0001, weight=1)
+            landscape = np.array(target_coords)
+            return handle_nii_map(L=landscape, sphere_coords=electrode_coords, lambda_val=0.0001, weight=1)
         except Exception as e:
             print(f"Error in handle_nii_map: {e}")
             return None
@@ -80,6 +81,7 @@ class OptimizerProcessor:
             optima_ampers = self.optimize_electrode(target_coords, electrode_coords)
             output_direct = self.save_vta(optima_ampers, electrode_coords, electrode_idx)
             self.merge_vtas(output_direct, os.path.join(self.output_path, f'electrode_{electrode_idx}'))
+        return electrode_dict
             
 if __name__ == "__main__":
     electrode_data = '/path/to/reco.mat'

@@ -1,0 +1,26 @@
+{
+    "Medtronic B33005": {
+        "contact_segment_labels": [
+            1,
+            2,
+            2,
+            2,
+            3,
+            3,
+            3,
+            4
+        ]   
+    },
+    "Medtronic B33015": {
+        "contact_segment_labels": [
+            1,
+            2,
+            2,
+            2,
+            3,
+            3,
+            3,
+            4
+        ]   
+    }
+}
