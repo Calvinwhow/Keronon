@@ -5,10 +5,14 @@ setup(
     version='0.1',
     packages=find_packages(),
     install_requires=[
-        'numpy',
-        'nibabel',
-        'scikit-learn',
-        'scipy',
+        "numpy",
+        "nibabel",
+        "scikit-learn",
+        "scipy",
+        "pandas",
+        "nilearn",
+        "h5py",
+        "calvin-utils-project @ git+https://github.com/Calvinwhow/calvin_utils_project.git"
     ],
     author='Calvin W. Howard',
     author_email='choward12@bwh.harvard.edu',
