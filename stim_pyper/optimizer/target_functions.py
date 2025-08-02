@@ -34,6 +34,9 @@ def assign_sphere_values(L, center, r):
     inside_sphere = distance_squared < r**2
     return inside_sphere.astype(int)
 
+def get_sphere_volume(r):
+    return 4/3 * r**3 * np.pi
+
 def dot_product(S, L):
     """
     Compute the dot product of the binary sphere array and magnitudes in L.
@@ -47,9 +50,6 @@ def dot_product(S, L):
     """
     magnitudes = L[:, 3]
     return np.dot(S, magnitudes)
-
-def get_sphere_volume(r):
-    return 4/3 * r**3 * np.pi
 
 def target_function(S_r, L, volume, e=1e-8):
     """
@@ -83,6 +83,28 @@ def assign_directional_values(L, directional_model):
     mask = directional_model.evaluate_planar_and_spherical_points(coords)
     return mask.astype(int)
 
+def generate_V(L, sphere_coords, v, directional_models=None):
+    '''
+    Computes the overall mask assocaited with each coordinate, v, and directionality. 
+    Args:
+        L: Array or points with magnitudes
+        sphere_coords: List of sphere center coordiantes
+        v: Array of current values for each sphere.
+        directional_models: Optional list of EvaluateDirectionalVta instances (or None).
+    Returns:
+        V: Array of mask for all VTAs
+    '''
+    r = compute_radius(v)                   # broadcast r calculation
+    V = np.zeros(L.shape[0], dtype=bool)    # initialize array to place masks into
+    for index in range(len(sphere_coords)):
+        if directional_models and directional_models[index]:
+            directional_models[index].radius_mm = r[index]
+            V_i = assign_directional_values(L, directional_models[index])
+        else:
+            V_i = assign_sphere_values(L, sphere_coords[index], r[index])
+        V |= V_i.astype(bool)               # inplace union
+    return V
+
 def target_function_handler(sphere_coords, v, L, directional_models=None):
     """
     Compute the total target function value for all spheres or directional VTAs.
@@ -110,6 +132,23 @@ def target_function_handler(sphere_coords, v, L, directional_models=None):
             target_value = target_function(S_r, L, volume)
             sum_target_value += target_value
     return sum_target_value
+
+def target_function_handlerV2(sphere_coords, v, L, directional_models=None):
+    """
+    Compute the total target function value for all spheres or directional VTAs.
+    
+    Args:
+        sphere_coords: List of sphere centers.
+        v: Array of current values for each sphere.
+        L: Array of points with magnitudes.
+        directional_models: Optional list of EvaluateDirectionalVta instances (or None).
+    
+    Returns:
+        Sum of target function values for all VTAs.
+    """
+    V = generate_V(L, sphere_coords, v, directional_models)
+    volume = np.sum(V)
+    return target_function(V, L, volume)
 
 def penalty_per_contact(v_i, lam):
     """
@@ -161,17 +200,15 @@ def loss_function(sphere_coords, v, L, lam, directional_models=None):
     Args:
         sphere_coords: List of sphere centers.
         v: Array of current values for each sphere.
-        L: Array of points with magnitudes.
+        L: Array of points with magnitudes in last column (N_Voxels, [x,y,z,magnitude]).
         lam: Penalty scaling factor.
         directional_models: Optional list of EvaluateDirectionalVta instances (or None).
 
     Returns:
         Loss function value.
     """
-    T = target_function_handler(sphere_coords, v, L, directional_models)
+    T = target_function_handlerV2(sphere_coords, v, L, directional_models)
     P1 = penalty_per_contact_handler(v, lam)
     P2 = penalty_all_contacts(v, lam)
-    # if directional_models:
-    #     P1 = P1 / 3
     return T - P1 - P2
 

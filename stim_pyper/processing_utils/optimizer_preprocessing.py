@@ -5,7 +5,44 @@ from scipy.ndimage import gaussian_filter
 from stim_pyper.optimizer.optimizer_utils import optimize_sphere_values
 from stim_pyper.vta_model.evaluate_directional_vta import EvaluateDirectionalVta
 
-def find_clusters(coordinates: np.ndarray, epsilon: float = 2.0) -> Dict:
+### Preprocessing for L ###
+def arctan_normalize(coords: np.ndarray) -> np.ndarray:
+    normalized = coords.copy()
+    normalized[:, 3] = np.arctan(normalized[:, 3])
+    return normalized
+
+def normalize(coords: np.ndarray) -> np.ndarray:
+    """
+    Normalize the coordinates by max. 
+    Args:
+        coords (np.ndarray): Nx4 array of coordinates.
+    Returns:
+        np.ndarray: Normalized coordinates.
+    """     
+    coords = coords.copy()
+    max_val = np.max(coords[:, 3])
+    coords[:, 3] = (coords[:, 3]) / (max_val)
+    return coords
+
+def bounding_box(L: np.ndarray, sphere_coords: np.ndarray = None, bbox_length: float = 30) -> np.ndarray:
+    """
+    Finds coordinates of L within some range of the avg contact coordinate. Then indexes L by these indices to subsample L. 
+    Args:
+        bbox_length (float): Scalar length in mm. Defaults to 30mm
+    Returns:
+        np.ndarray: Bounding box coordinates.
+    """
+    half_size = bbox_length / 2
+    cx, cy, cz = np.mean(sphere_coords, axis=0)[:3]
+    mask = (
+        (L[:, 0] >= cx - half_size) & (L[:, 0] <= cx + half_size) &
+        (L[:, 1] >= cy - half_size) & (L[:, 1] <= cy + half_size) &
+        (L[:, 2] >= cz - half_size) & (L[:, 2] <= cz + half_size)
+    )
+    return L[mask]
+
+### Initial Guess Helpers ###
+def find_clusters_max(coordinates: np.ndarray, epsilon: float = 2.0) -> Dict:
     """
     Identify the cluster with the maximum radius value from a set of coordinates.
 
@@ -67,41 +104,34 @@ def find_clusters_dbscan(coordinates: np.ndarray, epsilon: float = 2.0, max_atte
         "average": {"x": np.nan, "y": np.nan, "z": np.nan, "r": np.nan},
     }
 
-def arctan_normalize(coords: np.ndarray) -> np.ndarray:
-    normalized = coords.copy()
-    normalized[:, 3] = np.arctan(normalized[:, 3])
-    return normalized
+def find_clusters(L, epsilon, method):
+    allowed_methods=['max', 'dbscan']
+    if method not in allowed_methods:
+        raise ValueError(f"Method {method} not supported. Please choose method={allowed_methods}")
+    if method == 'max':
+        return find_clusters_max(L, epsilon=epsilon)
+    elif method == 'dbscan':        
+        return find_clusters_dbscan(L, epsilon)
+    else:
+        return None
 
-def normalize(coords: np.ndarray) -> np.ndarray:
+def positivity_metric(value: float, distance: float, d0: float = 1.0) -> float:
     """
-    Normalize the coordinates using min-max
-    Args:
-        coords (np.ndarray): Nx4 array of coordinates.
     Returns:
-        np.ndarray: Normalized coordinates.
-    """     
-    coords = coords.copy()
-    max_val = np.max(coords[:, 3])
-    coords[:, 3] = (coords[:, 3]) / (max_val)
-    return coords
+        float: A metric representing the positivity and closeness to the target value.
+    """
+    return value / (1 + np.exp(distance - d0))
 
-def get_v(
-    L: np.ndarray,
-    sphere_coords: np.ndarray,
-    box_size: float,
-    epsilon: float = 2,
-    sigma: float = 1.0
-) -> Tuple[np.ndarray, Dict]:
+def get_v(L: np.ndarray, sphere_coords: np.ndarray, bbox_length: float, epsilon: float = 2, method: str = 'max') -> Tuple[np.ndarray, Dict]:
     """Filters points inside a box centered at a given sphere coordinate."""
-    r = box_size
+    r = bbox_length/2
     v = []
     for coords in sphere_coords:
         cx, cy, cz = coords[:3]
         distances = np.sqrt((L[:, 0] - cx)**2 + (L[:, 1] - cy)**2 + (L[:, 2] - cz)**2)
         mask = distances <= r
-        filtered_L = L[mask]
-        # clusters = find_clusters_dbscan(filtered_L, epsilon=epsilon)
-        clusters = find_clusters(filtered_L, epsilon=epsilon)
+        L_masked = L[mask]
+        clusters = find_clusters(L_masked, epsilon, method)
         sweetspot_coord = [
             clusters['average']['x'],
             clusters['average']['y'],
@@ -113,38 +143,24 @@ def get_v(
     v = [x * (4 / total_v) for x in v]
     return np.array(v)
 
+def preprocess_L(L, sphere_coords, bbox_length):
+    '''Normalizes L and bounds the voxels for consideration around the electrode'''
+    L = normalize(L)
+    L = bounding_box(L, sphere_coords, bbox_length)
+    return L
 
-def positivity_metric(value: float, distance: float, d0: float = 1.0) -> float:
-    """
-    Returns:
-        float: A metric representing the positivity and closeness to the target value.
-    """
-    return value / (1 + np.exp(distance - d0))
-
-def bounding_box(L: np.ndarray, box_size: float = 10, sphere_coords: np.ndarray = None) -> np.ndarray:
-    """
-    Returns:
-        np.ndarray: Bounding box coordinates.
-    """
-    half_size = box_size / 2
-    cx, cy, cz = np.mean(sphere_coords, axis=0)[:3]
-    mask = (
-        (L[:, 0] >= cx - half_size) & (L[:, 0] <= cx + half_size) &
-        (L[:, 1] >= cy - half_size) & (L[:, 1] <= cy + half_size) &
-        (L[:, 2] >= cz - half_size) & (L[:, 2] <= cz + half_size)
-    )
-    filtered_L = L[mask]
-    return filtered_L
-
-def handle_nii_map(L: np.ndarray, sphere_coords: np.ndarray, lambda_val: float=0.001, directional_models_list: List[EvaluateDirectionalVta]=None):
-    '''Handler function to preprocess the landscape values, get initial guess for v, and call the optimization.'''
-    L = bounding_box(normalize(L), 30, sphere_coords)
+def get_first_guess(L, sphere_coords, bbox_length):
+    '''Calculates upon L to find initial guess for v array prior to optimization'''
     try:
-        v = get_v(L, sphere_coords, 20)
+        v = get_v(L, sphere_coords, bbox_length)
     except Exception as e:
         print(f"Error in get_v: {e}")
         v = np.random.normal(loc=0.5, scale=0.1, size=len(sphere_coords))
-        while sum(v) >= 5:
-            v = np.random.normal(loc=0.5, scale=0.1, size=len(sphere_coords))
-    output_v = optimize_sphere_values(sphere_coords, v, L, directional_models=directional_models_list, lam=lambda_val)
-    return output_v
+    return v
+
+### Orchestration Function ###
+def optimize(L: np.ndarray, sphere_coords: np.ndarray, directional_models_list: List[EvaluateDirectionalVta]=None):
+    '''Handler function to preprocess the landscape values, get initial guess for v, and call the optimization.'''
+    L = preprocess_L(L, sphere_coords, bbox_length=30)
+    v = get_first_guess(L, sphere_coords, bbox_length=30)
+    return optimize_sphere_values(sphere_coords, v, L, directional_models=directional_models_list, lam=0.001)

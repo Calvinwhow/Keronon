@@ -5,7 +5,7 @@ import nibabel as nib
 from collections import defaultdict
 from typing import List, Tuple, Dict
 from stim_pyper.processing_utils.optimizer_postprocessing import process_vta
-from stim_pyper.processing_utils.optimizer_preprocessing import handle_nii_map
+from stim_pyper.processing_utils.optimizer_preprocessing import optimize
 from stim_pyper.matlab_utils.mat_reader import MatReader, MatReaderV2
 from stim_pyper.json_utils.json_reader import JsonReader
 from calvin_utils.ccm_utils.bounding_box import NiftiBoundingBox
@@ -58,7 +58,7 @@ class OptimizerProcessor:
         '''Runs optimizer on list of contact coordinates using a list of target coords'''
         try:
             landscape = np.array(target_coords)
-            return handle_nii_map(L=landscape, sphere_coords=electrode_coords, lambda_val=0.001, directional_models_list=dir_models_list)
+            return optimize(L=landscape, sphere_coords=electrode_coords, directional_models_list=dir_models_list)
         except Exception as e:
             print(f"Error in handle_nii_map: {e}")
             return None
