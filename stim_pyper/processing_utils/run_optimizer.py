@@ -80,23 +80,23 @@ class OptimizerProcessor:
     def get_directional_electrodes(self, electrode_dict):
         '''Extracts info from electrode dict of style: {contact_int: {segment_int: array[x,y,z]}}'''
         n_contacts = len(electrode_dict)
-        dir_models_list = [None] * n_contacts           # Pre-fill a list to place EvaluateDirectionalVta objects into
+        dir_models_list = [None] * n_contacts                               # Pre-fill a list to place EvaluateDirectionalVta objects into
         elec_coords_list = [None] * n_contacts 
         
         # Get seg_map which is a dict which stores data like:
-        # seg_map[segment] = [(contact_num, [coord_list]), (contact_num, [coord_list])] 
+        # ex) seg_map[segment] = [(contact_num, [coord_list]), (contact_num, [coord_list])] 
         seg_map = defaultdict(list)
         for c_idx, seg_dict in electrode_dict.items():
             seg_id, coord_list = next(iter(seg_dict.items()))
-            seg_map[seg_id].append((c_idx,coord_list))    # appends the tuple
-            elec_coords_list[c_idx] = coord_list          # adds electrode coords to the elec_coords_list
+            seg_map[seg_id].append((c_idx,coord_list))                      # appends the tuple
+            elec_coords_list[c_idx] = coord_list                            # adds electrode coords to the elec_coords_list
         for _, segment_group in seg_map.items():
-            if len(segment_group) <= 1:                   # Leave full segments as None
+            if len(segment_group) <= 1:                                     # Leave full segments as None
                 continue      
-            segment_coords = [coord.tolist() for _, coord in segment_group]      # get the list of coordinates at this segment
-            for i, (contact_num, _) in enumerate(segment_group):                  # get          
+            segment_coords = [coord.tolist() for _, coord in segment_group] # get the list of coordinates at this segment
+            for i, (contact_num, _) in enumerate(segment_group):                    
                 vta_model = EvaluateDirectionalVta(contact_coordinates=segment_coords, primary_idx=i)
-                dir_models_list[contact_num] = vta_model                          # assign to list
+                dir_models_list[contact_num] = vta_model                    # assign to list
         elec_coords_list = np.array(elec_coords_list)
         return dir_models_list, elec_coords_list
         
