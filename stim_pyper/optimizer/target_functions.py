@@ -1,8 +1,38 @@
 import numpy as np
 
+# NOTE: During the assign values process, we have access to the contact's coords and get the ultimate mask. calculation 
+# NOTE: Since we have the paired [x,y,z] coordinates of each index in the mask from L[:, :3], we can find distance
+# NOTE: from each contact's coords. This distance can be used to convert mask-values to electrical field values 
+# NOTE: using a kernel which takes K([xyz]_i, [xyz]_c) and computes e = k (q.r**2)
+
 # -----------------------------
 # Target and Penalty Functions
 # -----------------------------
+
+def get_q(r, k, V=0.1):
+    '''
+    Field at most peripheral stimulation volume is 0.1V
+    Use this to find charge at origin of stimulation volume. 
+    '''
+    return (V * r**2) / k
+
+def efield_kernel(L, coord, r, k=8.99e9, e=1e-8):
+    '''
+    Generate a spherical e-field around a point source (contact).
+    Args:
+        L: (N, 4) array, where cols 0:3 are x,y,z coords
+        coord: (3,) contact location
+        r: radius from contact, used to estimate total charge
+        k: Coulomb constant (default 8.99e9 N·m²/C²)
+        e: epsilon to avoid divide-by-zero
+        
+    Returns:
+        np.array of electrical field in N/C
+    '''
+    k_mm = k * 1000**2                                                      # Convert K N·m²/C² → N·mm²/C²
+    q = get_q(r, k_mm)                                                      # Get Coulombs of origin of stimulation
+    pairwise_dist = np.linalg.norm(np.array(L[:, :3]) - np.array(coord), axis=1)    # find pairwise distance from the coordinate to all points
+    return k_mm * (q / (pairwise_dist**2 + e) )                                       # return scalar field in 
 
 def compute_radius(milliamps):
     """
@@ -33,6 +63,21 @@ def assign_sphere_values(L, center, r):
     distance_squared = dx**2 + dy**2 + dz**2
     inside_sphere = distance_squared < r**2
     return inside_sphere.astype(int)
+
+def assign_directional_values(L, directional_model):
+    """
+    Assign binary values to points in L based on directional VTA boundaries.
+    
+    Args:
+        L: Array of points with coordinates.
+        directional_model: an instance of EvaluateDirectionalVta
+    
+    Returns:
+        Binary array indicating valid VTA points (1 if inside, 0 if outside).
+    """
+    coords = L[:, :3]
+    mask = directional_model.evaluate_planar_and_spherical_points(coords)
+    return mask.astype(int)
 
 def get_sphere_volume(r):
     return 4/3 * r**3 * np.pi
@@ -67,21 +112,6 @@ def target_function(S_r, L, volume, e=1e-8):
     """
     numerator = dot_product(S_r, L)
     return numerator / (volume + e)
-
-def assign_directional_values(L, directional_model):
-    """
-    Assign binary values to points in L based on directional VTA boundaries.
-    
-    Args:
-        L: Array of points with coordinates.
-        directional_model: an instance of EvaluateDirectionalVta
-    
-    Returns:
-        Binary array indicating valid VTA points (1 if inside, 0 if outside).
-    """
-    coords = L[:, :3]
-    mask = directional_model.evaluate_planar_and_spherical_points(coords)
-    return mask.astype(int)
 
 def generate_V(L, sphere_coords, v, directional_models=None):
     '''
