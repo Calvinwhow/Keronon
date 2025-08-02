@@ -97,6 +97,7 @@ class OptimizerProcessor:
             for i, (contact_num, _) in enumerate(segment_group):                  # get          
                 vta_model = EvaluateDirectionalVta(contact_coordinates=segment_coords, primary_idx=i)
                 dir_models_list[contact_num] = vta_model                          # assign to list
+        elec_coords_list = np.array(elec_coords_list)
         return dir_models_list, elec_coords_list
         
     def run(self):
@@ -105,7 +106,7 @@ class OptimizerProcessor:
         electrode_info = self.get_electrode_info()
         for electrode_idx, electrode_dict in enumerate(electrode_info):
             dir_models_list, elec_coords_list = self.get_directional_electrodes(electrode_dict)
-            optima_ampers = self.optimize_electrode(target_coords, np.array(elec_coords_list), dir_models_list)
+            optima_ampers = self.optimize_electrode(target_coords, elec_coords_list, dir_models_list)
             output_direct = self.save_vta(optima_ampers, elec_coords_list, electrode_idx)
             self.merge_vtas(output_direct, os.path.join(self.output_path, f'electrode_{electrode_idx}'))
         return electrode_info
