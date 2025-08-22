@@ -122,7 +122,7 @@ def positivity_metric(value: float, distance: float, d0: float = 1.0) -> float:
     """
     return value / (1 + np.exp(distance - d0))
 
-def get_v(L: np.ndarray, sphere_coords: np.ndarray, bbox_length: float, epsilon: float = 2, method: str = 'max') -> Tuple[np.ndarray, Dict]:
+def get_v(L: np.ndarray, sphere_coords: np.ndarray, bbox_length: float, epsilon: float = 2, method: str = 'dbscan') -> Tuple[np.ndarray, Dict]:
     """Filters points inside a box centered at a given sphere coordinate."""
     r = bbox_length/2
     v = []
@@ -149,18 +149,23 @@ def preprocess_L(L, sphere_coords, bbox_length):
     L = bounding_box(L, sphere_coords, bbox_length)
     return L
 
-def get_first_guess(L, sphere_coords, bbox_length):
+def get_first_guess(L, sphere_coords, bbox_length, parallel: bool = False, thread = None):
     '''Calculates upon L to find initial guess for v array prior to optimization'''
+    if parallel:
+        if thread == 0:
+            return get_v(L, sphere_coords, bbox_length)
+        else:
+            v = np.abs(np.random.normal(loc=0.5, scale=0.25, size=len(sphere_coords)))
+            return (v / np.sum(v)) * 4
     try:
         v = get_v(L, sphere_coords, bbox_length)
     except Exception as e:
-        print(f"Error in get_v: {e}")
         v = np.random.normal(loc=0.5, scale=0.1, size=len(sphere_coords))
     return v
 
 ### Orchestration Function ###
-def optimize(L: np.ndarray, sphere_coords: np.ndarray, directional_models_list: List[EvaluateDirectionalVta]=None):
+def optimize(L: np.ndarray, sphere_coords: np.ndarray, directional_models_list: List[EvaluateDirectionalVta]=None, parallel: bool = False, thread = None):
     '''Handler function to preprocess the landscape values, get initial guess for v, and call the optimization.'''
     L = preprocess_L(L, sphere_coords, bbox_length=30)
-    v = get_first_guess(L, sphere_coords, bbox_length=30)
+    v = get_first_guess(L, sphere_coords, bbox_length=30, parallel=parallel, thread=thread)
     return optimize_sphere_values(sphere_coords, v, L, directional_models=directional_models_list, lam=0.001)

@@ -39,7 +39,7 @@ def compute_radius(milliamps):
     Compute the radius based on the input current in milliamps.
     """
     radius = (milliamps - 0.1) / 0.22
-    return np.sqrt(radius) if milliamps > 0.1 else 0
+    return np.where(milliamps > 0.1, np.sqrt(radius), 0)
 
 def assign_sphere_values(L, center, r):
     """

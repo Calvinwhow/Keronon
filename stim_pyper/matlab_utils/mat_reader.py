@@ -154,7 +154,6 @@ class MatReaderV2:
         '''
         coords_list  = self.coords()
         model_list   = self.elmodels()
-
         if len(coords_list) != len(model_list):
             raise ValueError("mismatch coords vs models")
 

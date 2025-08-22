@@ -8,14 +8,19 @@ from stim_pyper.processing_utils.optimizer_postprocessing import process_vta
 from stim_pyper.processing_utils.optimizer_preprocessing import optimize
 from stim_pyper.matlab_utils.mat_reader import MatReader, MatReaderV2
 from stim_pyper.json_utils.json_reader import JsonReader
-from calvin_utils.ccm_utils.bounding_box import NiftiBoundingBox
+from stim_pyper.nifti_utils.bounding_box import NiftiBoundingBox
 from stim_pyper.vta_model.evaluate_directional_vta import EvaluateDirectionalVta
+from concurrent.futures import ThreadPoolExecutor
+from nilearn.image import resample_img
+import shutil
+from pathlib import Path
 
 class OptimizerProcessor:
-    def __init__(self, electrode_data_path, nifti_path: str, output_path: str):
+    def __init__(self, electrode_data_path, nifti_path: str, output_path: str, parallel: bool = False):
         self.electrode_data = electrode_data_path
         self.nifti_path = nifti_path
         self.output_path = output_path
+        self.parallel = parallel
 
     def nii_to_mni(self, path) -> List[Tuple[float, float, float, float]]:
         """Reads a NIfTI file and converts it to a list of MNI coordinates with associated r values."""
@@ -54,17 +59,12 @@ class OptimizerProcessor:
             raise ValueError(f"File type not yet supported for file: {self.electrode_data}")
         return electrode_info
 
-    def optimize_electrode(self, target_coords, electrode_coords, dir_models_list):
+    def optimize_electrode(self, target_coords, electrode_coords, dir_models_list, thread = None):
         '''Runs optimizer on list of contact coordinates using a list of target coords'''
-        try:
-            landscape = np.array(target_coords)
-            return optimize(L=landscape, sphere_coords=electrode_coords, directional_models_list=dir_models_list)
-        except Exception as e:
-            print(f"Error in handle_nii_map: {e}")
-            return None
+        landscape = np.array(target_coords)
+        return optimize(L=landscape, sphere_coords=electrode_coords, directional_models_list=dir_models_list, parallel=self.parallel, thread=thread)
         
-    def save_vta(self, optima_ampers, electrode_coords, electrode_idx):
-        out_dir = os.path.join(self.output_path, f'electrode_{electrode_idx}')
+    def save_vta(self, optima_ampers, electrode_coords, electrode_idx, out_dir):
         os.makedirs(out_dir, exist_ok=True)
         process_vta(optima_ampers, electrode_coords, electrode_idx, out_dir)
         nii_files = [os.path.join(out_dir, file) for file in os.listdir(out_dir) if file.endswith('.nii')]
@@ -99,16 +99,100 @@ class OptimizerProcessor:
                 dir_models_list[contact_num] = vta_model                    # assign to list
         elec_coords_list = np.array(elec_coords_list)
         return dir_models_list, elec_coords_list
+    
+    def calculate_overlap(self, mask_file):
         
-    def run(self):
+        target_img = nib.load(self.nifti_path)
+        vta_img = nib.load(mask_file)
+
+        target_img = resample_img(
+            target_img,
+            target_affine=vta_img.affine,
+            target_shape=vta_img.shape,
+            interpolation='nearest',
+            force_resample=True,
+            copy_header=True
+        )
+
+        target_data = target_img.get_fdata()
+        vta_data = vta_img.get_fdata()
+
+        target_data = target_data / np.nanmax(target_data)
+        target_data = np.nan_to_num(target_data, nan=0.0)
+        if target_data.shape != vta_data.shape:
+            raise ValueError("Target and VTA images must have the same shape.")
+
+        dot_product = np.dot(target_data.flatten(), vta_data.flatten())
+        overlap = dot_product / np.sum(vta_data > 0)
+        return overlap
+
+    # Not very elegant, but works for now.
+    def select_optimal_mask(self):
+        mask_files = []
+        for thread_dir in os.listdir(self.output_path):
+            thread_path = os.path.join(self.output_path, thread_dir)
+            if os.path.isdir(thread_path) and thread_dir.startswith('thread_'):
+                for electrode_dir in os.listdir(thread_path):
+                    electrode_path = os.path.join(thread_path, electrode_dir)
+                    if os.path.isdir(electrode_path) and electrode_dir.startswith('electrode_'):
+                        for file in os.listdir(electrode_path):
+                            if file.endswith('mask.nii.gz'):
+                                mask_files.append(os.path.join(electrode_path, file))
+        
+        # Calculate overlaps for each mask file
+        overlaps = {mask_file: self.calculate_overlap(mask_file) for mask_file in mask_files}
+        
+        # Find the mask with the highest overlap for each electrode
+        best_masks = {}
+        for mask_file, overlap in overlaps.items():
+            electrode_id = mask_file.split('/')[-2] 
+            if electrode_id not in best_masks or overlap > best_masks[electrode_id][1]:
+                best_masks[electrode_id] = (mask_file, overlap)
+        
+        # Keep only the best masks for each electrode
+        for thread_dir in os.listdir(self.output_path):
+            thread_path = os.path.join(self.output_path, thread_dir)
+            if os.path.isdir(thread_path) and thread_dir.startswith('thread_'):
+                for electrode_dir in os.listdir(thread_path):
+                    electrode_path = os.path.join(thread_path, electrode_dir)
+                    if os.path.isdir(electrode_path) and electrode_dir.startswith('electrode_'):
+                        electrode_id = electrode_dir
+                        best_mask_path = best_masks.get(electrode_id, (None,))[0]
+                        if not best_mask_path or not best_mask_path.startswith(electrode_path):
+                            shutil.rmtree(electrode_path)
+
+                # Move the best masks to root
+                for electrode_dir in os.listdir(thread_path):
+                    electrode_path = os.path.join(thread_path, electrode_dir)
+                    if os.path.isdir(electrode_path) and electrode_dir.startswith('electrode_'):
+                        shutil.move(electrode_path, self.output_path)
+                shutil.rmtree(thread_path)
+        
+        return [mask_info[0] for mask_info in best_masks.values()]
+
+    def multistart(self):
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(self.run, thread) for thread in range(10)]
+            for future in futures:
+                try:
+                    result = future.result()
+                except Exception as e:
+                    print(f"Thread failed: {e}")
+        self.select_optimal_mask()
+
+    def run(self, thread = None):
         """Processes the data and calls handle_nii_map for each combination of lambda."""
         target_coords = self.nii_to_mni(self.nifti_path)
         electrode_info = self.get_electrode_info()
         for electrode_idx, electrode_dict in enumerate(electrode_info):
             dir_models_list, elec_coords_list = self.get_directional_electrodes(electrode_dict)
-            optima_ampers = self.optimize_electrode(target_coords, elec_coords_list, dir_models_list)
-            output_direct = self.save_vta(optima_ampers, elec_coords_list, electrode_idx)
-            self.merge_vtas(output_direct, os.path.join(self.output_path, f'electrode_{electrode_idx}'))
+            optima_ampers = self.optimize_electrode(target_coords, elec_coords_list, dir_models_list, thread)
+            if thread is not None:
+                output_direct = self.save_vta(optima_ampers, elec_coords_list, electrode_idx, os.path.join(self.output_path, f'thread_{thread}', f'electrode_{electrode_idx}'))
+                self.merge_vtas(output_direct, os.path.join(self.output_path, f'thread_{thread}', f'electrode_{electrode_idx}'))
+            else:
+                output_direct = self.save_vta(optima_ampers, elec_coords_list, electrode_idx, os.path.join(self.output_path, f'electrode_{electrode_idx}'))
+                self.merge_vtas(output_direct, os.path.join(self.output_path, f'electrode_{electrode_idx}'))
         return electrode_info
             
 if __name__ == "__main__":
