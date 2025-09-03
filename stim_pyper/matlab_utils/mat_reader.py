@@ -128,7 +128,7 @@ class MatReaderV2:
     
     def segment_lookup(self, electrode_model, segment_lut='numel') -> List[int]:
         '''References the electrode_lut.json file which contains info on which contacts are in which segments.'''
-        cwd = os.path.abspath(os.getcwd())
+        cwd = Path(__file__).resolve().parents[2]
         lut = os.path.join(cwd, 'stim_pyper', 'resources', 'electrode_specs.json')
         converter = os.path.join(cwd, 'stim_pyper', 'resources', 'elec_converter.json')
         with open(lut, 'r') as f:
