@@ -4,6 +4,8 @@ setup(
     name='Stim-PyPer',
     version='0.1',
     packages=find_packages(),
+    include_package_data=True,
+    package_data={'stim_pyper': ['resources/*']},
     install_requires=[],
     author='Calvin W. Howard',
     author_email='choward12@bwh.harvard.edu',
